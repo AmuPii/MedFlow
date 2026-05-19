@@ -1,0 +1,54 @@
+{
+  "name": "medflow-desktop",
+  "version": "1.0.0",
+  "description": "Aplicativo desktop para controle de uso de medicamentos",
+  "main": "electron/main.js",
+  "author": "MedFlow",
+  "license": "MIT",
+  "scripts": {
+    "install:frontend": "npm --prefix frontend install",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "python -m uvicorn backend.app.main:create_app --factory --host 127.0.0.1 --port 8765 --reload",
+    "dev:electron": "wait-on tcp:8765 http://localhost:5173 && electron .",
+    "dev": "concurrently -k \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "test:frontend": "npm --prefix frontend run test",
+    "test:backend": "pytest backend/tests",
+    "test:electron": "node --test electron/tests/*.test.cjs",
+    "test": "npm run test:frontend && npm run test:backend && npm run test:electron",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "pyinstaller --noconfirm --onefile --name medflow_backend backend/run_server.py",
+    "build": "npm run build:frontend",
+    "pack:win": "npm run build:frontend && npm run build:backend && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^36.3.2",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.medflow.desktop",
+    "productName": "MedFlow",
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/medflow_backend.exe",
+        "to": "backend/medflow_backend.exe"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
