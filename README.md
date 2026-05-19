@@ -58,6 +58,7 @@ MedFlow/
 │  └─ run_server.py
 ├─ scripts/
 │  ├─ build-backend.ps1
+│  ├─ build-clean.ps1
 │  └─ build-exe.ps1
 └─ package.json
 ```
@@ -107,13 +108,29 @@ npm run test
 
 ## Gerar executável `.exe`
 
-### Opção 1 (script único)
+### Método recomendado (Windows)
+
+1. Feche qualquer instância aberta do MedFlow.
+2. Execute o build limpo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-clean.ps1
+```
+
+3. Ao final do script, valide:
+- `.\backend\bin\medflow_backend.exe` existe
+- `.\dist\win-unpacked\resources\backend\medflow_backend.exe` existe
+
+4. Instale pelo arquivo gerado em `.\dist\` (instalador NSIS).
+5. Abra o app pelo Menu Iniciar (`MedFlow`).
+
+### Opção rápida (sem limpeza)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-exe.ps1
 ```
 
-### Opção 2 (manual)
+### Opção manual
 
 ```powershell
 npm run build:frontend
@@ -135,4 +152,3 @@ No app empacotado, os dados são salvos no diretório `userData` do Electron, in
 - O backend sobe localmente em `127.0.0.1:8765`.
 - O frontend conversa com a API local via HTTP.
 - A notificação é nativa do Windows (Electron Notification).
-

@@ -2,7 +2,7 @@ import os
 
 import uvicorn
 
-from app.main import create_app
+from backend.app.main import create_app
 
 
 def run():
@@ -14,4 +14,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-

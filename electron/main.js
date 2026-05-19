@@ -1,4 +1,5 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { app, BrowserWindow, Notification, dialog } = require("electron");
 const { shouldTriggerNotification } = require("./notificationUtils");
@@ -11,6 +12,8 @@ let mainWindow = null;
 let backendProcess = null;
 let notificationTimer = null;
 let lastNotificationDate = null;
+let isShuttingDown = false;
+let backendManagedByApp = false;
 
 const isDev = !app.isPackaged;
 
@@ -22,15 +25,34 @@ function getBackendCommand() {
     };
   }
 
+  const candidates = [
+    path.join(process.resourcesPath, "backend", "medflow_backend.exe"),
+    path.join(process.resourcesPath, "medflow_backend.exe"),
+    path.join(path.dirname(process.execPath), "medflow_backend.exe")
+  ];
+  const backendExe = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!backendExe) {
+    throw new Error(`Backend não encontrado. Caminhos testados: ${candidates.join(" | ")}`);
+  }
+
   return {
-    command: path.join(process.resourcesPath, "backend", "medflow_backend.exe"),
+    command: backendExe,
     args: []
   };
 }
 
 function startBackend() {
   const backendPath = app.getPath("userData");
-  const { command, args } = getBackendCommand();
+  let commandInfo;
+  try {
+    commandInfo = getBackendCommand();
+  } catch (error) {
+    dialog.showErrorBox("MedFlow", String(error.message || error));
+    app.quit();
+    return;
+  }
+  const { command, args } = commandInfo;
+  const spawnCwd = isDev ? app.getAppPath() : path.dirname(command);
   const env = {
     ...process.env,
     MEDFLOW_DATA_DIR: backendPath,
@@ -38,16 +60,41 @@ function startBackend() {
   };
 
   backendProcess = spawn(command, args, {
-    cwd: app.getAppPath(),
+    cwd: spawnCwd,
     env,
     windowsHide: true
   });
+  backendManagedByApp = true;
 
-  backendProcess.on("exit", (code) => {
-    if (code !== 0) {
-      dialog.showErrorBox("MedFlow", `Backend finalizado com código ${code}.`);
-    }
+  backendProcess.on("error", (error) => {
+    dialog.showErrorBox("MedFlow", `Falha ao iniciar backend: ${error.message}`);
   });
+
+  backendProcess.on("exit", async (code, signal) => {
+    backendProcess = null;
+    backendManagedByApp = false;
+    if (isShuttingDown) return;
+    if (code === 0) return;
+    if (code === null && signal) return;
+    if (code === 1) {
+      try {
+        const probe = await fetch(`${API_URL}/health`);
+        if (probe.ok) return;
+      } catch (_) {
+        // if no server is reachable, keep the error message
+      }
+    }
+    dialog.showErrorBox("MedFlow", `Backend finalizado com código ${code}.`);
+  });
+}
+
+async function isBackendAlreadyRunning() {
+  try {
+    const response = await fetch(`${API_URL}/health`);
+    return response.ok;
+  } catch (_) {
+    return false;
+  }
 }
 
 async function waitForBackend(timeoutMs = 15000) {
@@ -78,11 +125,11 @@ function createWindow() {
     }
   });
 
-  const url = isDev
-    ? "http://localhost:5173"
-    : `file://${path.join(app.getAppPath(), "frontend", "dist", "index.html")}`;
-
-  mainWindow.loadURL(url);
+  if (isDev) {
+    mainWindow.loadURL("http://localhost:5173");
+  } else {
+    mainWindow.loadFile(path.join(app.getAppPath(), "frontend", "dist", "index.html"));
+  }
   mainWindow.once("ready-to-show", () => mainWindow.show());
 }
 
@@ -117,14 +164,18 @@ function stopNotificationLoop() {
 }
 
 function stopBackend() {
-  if (!backendProcess) return;
+  if (!backendProcess || !backendManagedByApp) return;
   backendProcess.kill();
-  backendProcess = null;
 }
 
 app.whenReady().then(async () => {
   app.setAppUserModelId("com.medflow.desktop");
-  startBackend();
+  const backendRunning = await isBackendAlreadyRunning();
+  if (!backendRunning) {
+    startBackend();
+  } else {
+    backendManagedByApp = false;
+  }
   try {
     await waitForBackend();
   } catch (error) {
@@ -137,10 +188,14 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    isShuttingDown = true;
+    app.quit();
+  }
 });
 
 app.on("before-quit", () => {
+  isShuttingDown = true;
   stopNotificationLoop();
   stopBackend();
 });

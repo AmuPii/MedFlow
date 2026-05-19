@@ -16,7 +16,7 @@
     "test:electron": "node --test electron/tests/*.test.cjs",
     "test": "npm run test:frontend && npm run test:backend && npm run test:electron",
     "build:frontend": "npm --prefix frontend run build",
-    "build:backend": "pyinstaller --noconfirm --onefile --name medflow_backend backend/run_server.py",
+    "build:backend": "pyinstaller --noconfirm --onefile --name medflow_backend --distpath backend/bin --workpath backend/build --specpath backend backend/run_server.py",
     "build": "npm run build:frontend",
     "pack:win": "npm run build:frontend && npm run build:backend && electron-builder --win nsis"
   },
@@ -36,7 +36,7 @@
     ],
     "extraResources": [
       {
-        "from": "backend/dist/medflow_backend.exe",
+        "from": "backend/bin/medflow_backend.exe",
         "to": "backend/medflow_backend.exe"
       }
     ],
